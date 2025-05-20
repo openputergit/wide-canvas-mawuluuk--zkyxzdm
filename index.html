@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to PDF Converter | By Harsh Sharma</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+        }
+        .image-preview {
+            width: 210mm;
+            height: 297mm;
+            margin: 10px auto;
+            border: 1px solid #ddd;
+        }
+        .preview-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="loading" id="loading">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+            <p class="mt-2 text-gray-600">Processing...</p>
+        </div>
+    </div>
+
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl md:text-3xl font-bold text-gray-800">Image to PDF Converter</h1>
+                <p class="text-sm text-gray-600">Made By Harsh Sharma</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex flex-wrap gap-4 justify-center mb-6">
+                    <button onclick="document.getElementById('imageInput').click()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg transition duration-200 flex items-center">
+                        <i class="bi bi-upload mr-2"></i>
+                        Upload Images
+                    </button>
+                    <button onclick="clearImages()" class="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg transition duration-200 flex items-center">
+                        <i class="bi bi-trash mr-2"></i>
+                        Clear All
+                    </button>
+                    <button onclick="convertToPDF()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg transition duration-200 flex items-center">
+                        <i class="bi bi-file-pdf mr-2"></i>
+                        Convert to PDF
+                    </button>
+                </div>
+                <input type="file" id="imageInput" accept="image/*" multiple class="hidden" onchange="handleImageUpload(event)">
+                <div id="previewContainer" class="grid grid-cols-1 gap-6"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 text-white py-6">
+        <div class="container mx-auto px-4 text-center">
+            <p>&copy; 2024 Image to PDF Converter. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        let images = [];
+
+        async function handleImageUpload(event) {
+            const files = event.target.files;
+            document.getElementById('loading').style.display = 'flex';
+            
+            for (let file of files) {
+                try {
+                    // Compress image before preview
+                    const compressedFile = await imageCompression(file, {
+                        maxSizeMB: 1,
+                        maxWidthOrHeight: 2480, // A4 size at 300 DPI
+                        useWebWorker: true
+                    });
+
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        images.push(e.target.result);
+                        updatePreview();
+                    };
+                    reader.readAsDataURL(compressedFile);
+                } catch (error) {
+                    console.error("Error processing image:", error);
+                }
+            }
+            
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function updatePreview() {
+            const container = document.getElementById('previewContainer');
+            container.innerHTML = '';
+            
+            images.forEach((image, index) => {
+                const preview = document.createElement('div');
+                preview.className = 'image-preview bg-white rounded-lg shadow';
+                preview.innerHTML = `
+                    <div class="relative">
+                        <img src="${image}" class="preview-img" alt="Preview ${index + 1}">
+                        <button onclick="removeImage(${index})" class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(preview);
+            });
+        }
+
+        function removeImage(index) {
+            images.splice(index, 1);
+            updatePreview();
+        }
+
+        function clearImages() {
+            images = [];
+            updatePreview();
+        }
+
+        async function convertToPDF() {
+            if (images.length === 0) {
+                alert('Please upload at least one image');
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'flex';
+
+            try {
+                const pdf = new jspdf.jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+
+                for (let i = 0; i < images.length; i++) {
+                    if (i > 0) {
+                        pdf.addPage();
+                    }
+
+                    const imgData = images[i];
+                    const img = new Image();
+                    await new Promise((resolve) => {
+                        img.onload = resolve;
+                        img.src = imgData;
+                    });
+
+                    // Calculate dimensions to fit A4
+                    const pageWidth = pdf.internal.pageSize.getWidth();
+                    const pageHeight = pdf.internal.pageSize.getHeight();
+                    const imgRatio = img.width / img.height;
+                    const pageRatio = pageWidth / pageHeight;
+                    
+                    let finalWidth = pageWidth;
+                    let finalHeight = pageWidth / imgRatio;
+                    
+                    if (finalHeight > pageHeight) {
+                        finalHeight = pageHeight;
+                        finalWidth = pageHeight * imgRatio;
+                    }
+
+                    const x = (pageWidth - finalWidth) / 2;
+                    const y = (pageHeight - finalHeight) / 2;
+
+                    pdf.addImage(imgData, 'JPEG', x, y, finalWidth, finalHeight, undefined, 'FAST');
+                }
+
+                pdf.save('converted-images.pdf');
+            } catch (error) {
+                console.error("Error creating PDF:", error);
+                alert('Error creating PDF. Please try again.');
+            }
+
+            document.getElementById('loading').style.display = 'none';
+        }
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
